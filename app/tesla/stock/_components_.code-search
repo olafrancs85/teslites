@@ -1,0 +1,14 @@
+# Query: @/components/
+# ContextLines: 1
+
+2 results - 2 files
+
+components.json:
+  16      "utils": "@/lib/utils",
+  17:     "ui": "@/Components/ui",
+  18      "lib": "@/lib",
+
+app\rewards\page.tsx:
+  18    CardTitle,
+  19: } from "@/Components/ui/card";
+  20  import { Pencil, Trash2 } from "lucide-react";
