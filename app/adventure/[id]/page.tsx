@@ -6,7 +6,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from "firebase/fires
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { addPointsToUser } from "../../../lib/rewards";
+import { addPointsToUser } from "@/lib/rewards";
 
 export default function AdventureDetailPage() {
   const params = useParams();

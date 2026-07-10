@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
-import AdventureCard from "@/app/Components/AdventureCard";
+import AdventureCard from "../Components/AdventureCard";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";

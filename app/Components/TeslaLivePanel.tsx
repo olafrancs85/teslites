@@ -1,7 +1,8 @@
 "use client";
-
+import TeslaCandlestickChart from "@/components/stock/TeslaCandlestickChart";
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import type { CandlestickData, Time } from "lightweight-charts";
 import {
   useTeslaLiveIntelligence,
   MarketMovingType,
@@ -12,15 +13,17 @@ import {
    TYPES
 ============================= */
 type Candle = {
+  time: number;
   open: number;
   high: number;
   low: number;
   close: number;
+  volume: number;
 };
 
 type TeslaLivePanelProps = {
-  candles: Candle[];
-  latest: Candle;
+  candles?: Candle[];
+  latest?: Candle;
 };
 
 /* =============================
@@ -51,8 +54,15 @@ function calculateMA(candles: Candle[], period: number) {
    COMPONENT
 ============================= */
 export default function TeslaLivePanel({
-  candles,
-  latest,
+  candles = [],
+  latest = {
+    open: 0,
+    high: 0,
+    low: 0,
+    close: 0,
+    time: 0,
+    volume: 0
+  },
 }: TeslaLivePanelProps) {
   const [open, setOpen] = useState(true);
 
@@ -121,6 +131,14 @@ export default function TeslaLivePanel({
   const priceChange = latest.close - latest.open;
   const isUp = priceChange >= 0;
 
+  const support = candles.length
+  ? Math.min(...candles.map(c => c.low))
+  : null;
+
+const resistance = candles.length
+  ? Math.max(...candles.map(c => c.high))
+  : null;
+  
   return (
     <div className="fixed bottom-4 right-4 z-50 w-96">
       <div className="bg-black text-white rounded-xl shadow-xl border border-red-600">
@@ -148,40 +166,15 @@ export default function TeslaLivePanel({
             )}
 
             {/* MINI CHART */}
-            {chartData && (
-              <div className="border border-gray-700 rounded-lg p-2 bg-gray-900">
-                <svg width={chartData.width} height={chartData.height}>
-                  <path
-                    d={chartData.pricePath}
-                    stroke="#22c55e"
-                    strokeWidth="1.5"
-                    fill="none"
-                  />
-                  {chartData.ma20Path && (
-                    <path
-                      d={`M ${chartData.ma20Path}`}
-                      stroke="#facc15"
-                      strokeWidth="1"
-                      fill="none"
-                    />
-                  )}
-                  {chartData.ma50Path && (
-                    <path
-                      d={`M ${chartData.ma50Path}`}
-                      stroke="#60a5fa"
-                      strokeWidth="1"
-                      fill="none"
-                    />
-                  )}
-                </svg>
-
-                <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                  <span>Price</span>
-                  <span className="text-yellow-400">MA20</span>
-                  <span className="text-blue-400">MA50</span>
-                </div>
-              </div>
-            )}
+{candles.length > 0 && (
+  <div className="border border-gray-700 rounded-lg p-2 bg-gray-900">
+    <TeslaCandlestickChart
+  candles={candles}
+  support={support}
+  resistance={resistance}
+/>
+  </div>
+)}
 
             {/* LATEST PRICE */}
             <div className="text-xs border border-gray-700 rounded-md px-3 py-2 bg-black">

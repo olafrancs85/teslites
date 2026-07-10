@@ -10,9 +10,15 @@ const openai = new OpenAI({
 export async function GET() {
   try {
     // 1️⃣ Fetch top market-moving Tesla news
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/tesla/live`);
-    const data = await res.json();
-    const news = data.marketMoving || [];
+    const baseUrl =
+  process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+const res = await fetch(`${baseUrl}/api/teslite-ai/live/tesla-news`, {
+  cache: "no-store",
+});
+
+const data = await res.json();
+const news = data.news || [];
 
     if (!news.length) {
       return NextResponse.json({
@@ -21,56 +27,59 @@ export async function GET() {
       });
     }
 
-    // 2️⃣ Sort news by impact descending and take top 3
-    const sortedNews = [...news]
-      .sort((a, b) => (b.impactScore || 0) - (a.impactScore || 0))
-      .slice(0, 3);
+        // 2️⃣ Take the latest 3 Tesla news articles
+    const latestNews = news.slice(0, 3);
 
-    // 3️⃣ Compute dynamic confidence
-    const maxImpact = Math.max(...sortedNews.map(n => n.impactScore || 0));
+    // 3️⃣ Confidence based on number of articles
     let confidence: "Low" | "Medium" | "High" = "Medium";
-    if (maxImpact > 70) confidence = "High";
-    else if (maxImpact > 40) confidence = "Medium";
+
+    if (latestNews.length >= 3) confidence = "High";
+    else if (latestNews.length === 2) confidence = "Medium";
     else confidence = "Low";
 
     // 4️⃣ Compose OpenAI prompt
     const prompt = `
-You are a financial AI analyst. Summarize Tesla news concisely in 2–3 sentences.
-Use this information:
-${sortedNews.map(
-  n => `- ${n.title} (Impact: ${n.impactScore}, Sentiment: ${n.sentiment})`
-).join("\n")}
+You are a Tesla financial analyst.
 
-Output a short market summary in plain English, highlighting key headlines and sentiment.
+Summarize the following Tesla news in 2–3 sentences.
+
+${latestNews
+  .map(
+    (n: any) =>
+      `Title: ${n.title}
+Description: ${n.description ?? "No description"}`
+  )
+  .join("\n\n")}
+
+Explain the overall market outlook in plain English.
 `;
 
-    // 5️⃣ Generate AI summary via OpenAI (if key is set)
+    // 5️⃣ Generate AI summary
     let summary = "";
+
     if (process.env.OPENAI_API_KEY) {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
+        temperature: 0.5,
       });
 
-      // ✅ TypeScript-safe access to content
       summary =
-        completion.choices?.[0]?.message?.content?.trim() || "";
+        completion.choices?.[0]?.message?.content?.trim() ?? "";
     }
 
-    // 6️⃣ Fallback to rule-based summary if OpenAI fails or not configured
+    // 6️⃣ Fallback summary
     if (!summary) {
-      const bullish = sortedNews.filter(n => n.sentiment === "BULLISH").length;
-      const bearish = sortedNews.filter(n => n.sentiment === "BEARISH").length;
-
-      summary =
-        `Top news: ${sortedNews[0].title}. ` +
-        `Signals: ${bullish} bullish, ${bearish} bearish. ` +
-        "Monitor closely for market impact.";
+      summary = latestNews
+        .map((n: any) => `• ${n.title}`)
+        .join("\n");
     }
 
-    // 7️⃣ Return JSON
-    return NextResponse.json({ summary, confidence });
+    // 7️⃣ Return
+    return NextResponse.json({
+      summary,
+      confidence,
+    });
   } catch (err) {
     console.error("Tesla AI summary error:", err);
 

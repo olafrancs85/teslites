@@ -24,11 +24,16 @@ export async function GET() {
     const data = await res.json();
 
     if (!data.quarterlyEarnings) {
-      return NextResponse.json(
-        { error: "Earnings data unavailable (rate limit?)" },
-        { status: 429 }
-      );
-    }
+  return NextResponse.json({
+    earnings: {
+      fiscalDate: "Unavailable",
+      eps: null,
+      estimatedEps: null,
+      surprise: null,
+      verdict: "unknown",
+    },
+  });
+}
 
     const latest = data.quarterlyEarnings[0];
 

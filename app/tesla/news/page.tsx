@@ -1,7 +1,8 @@
 "use client";
-
+export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense } from "react";
 import CommentsSection from "@/components/CommentsSection";
 
 /* =============================
@@ -63,7 +64,7 @@ const articleStyles = `
 /* =============================
    COMPONENT
 ============================= */
-export default function TeslaNewsPage() {
+function TeslaNewsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const src = searchParams.get("src") ?? "";
@@ -294,5 +295,12 @@ export default function TeslaNewsPage() {
         ))}
       </div>
     </div>
+  );
+}
+export default function TeslaNewsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TeslaNewsContent />
+    </Suspense>
   );
 }

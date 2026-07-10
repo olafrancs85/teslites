@@ -1,4 +1,4 @@
-import type { SignalEvolutionProfile } from "./SpaceXIntelligenceHub";
+import type { SignalEvolutionProfile } from "@/components/intelligence/core/types";
 
 export const SpaceXDomains = [
   {

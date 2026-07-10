@@ -101,37 +101,46 @@ export function useTeslaLiveIntelligence() {
       }
 
       /* ---------- Alerts ---------- */
-      const alertsRes = await fetch("/api/teslite-ai/alerts/recent", { cache: "no-store" });
-      const alertsData = safeJsonParse(await alertsRes.text());
+/*
+const alertsRes = await fetch("/api/teslite-ai/alerts/recent", { cache: "no-store" });
+const alertsData = safeJsonParse(await alertsRes.text());
 
-      let breakingFromAlerts = false;
+let breakingFromAlerts = false;
 
-      if (alertsData?.alerts) {
-        setAlerts(alertsData.alerts);
-        breakingFromAlerts = alertsData.alerts.some((a: AlertType) => a.isBreaking);
-      }
+if (alertsData?.alerts) {
+  setAlerts(alertsData.alerts);
+  breakingFromAlerts = alertsData.alerts.some((a: AlertType) => a.isBreaking);
+}
+*/
+const breakingFromAlerts = false;
 
       /* ---------- Market-Moving ---------- */
-      const liveRes = await fetch("/api/tesla/live", { cache: "no-store" });
-      const liveData = safeJsonParse(await liveRes.text());
+/*
+const liveRes = await fetch("/api/tesla/live", { cache: "no-store" });
+const liveData = safeJsonParse(await liveRes.text());
 
-      let breakingFromMarket = false;
-      let normalized: MarketMovingType[] = [];
+let breakingFromMarket = false;
+let normalized: MarketMovingType[] = [];
 
-      if (liveData?.marketMoving) {
-        normalized = liveData.marketMoving.map((m: MarketMovingType) => {
-          const impact = m.impactScore ?? 50;
-          if (impact >= 70) breakingFromMarket = true;
+if (liveData?.marketMoving) {
+  normalized = liveData.marketMoving.map((m: MarketMovingType) => {
+    const impact = m.impactScore ?? 50;
+    if (impact >= 70) breakingFromMarket = true;
 
-          return {
-            title: m.title,
-            link: normalizeLink(m.link),
-            impactScore: impact,
-          };
-        });
+    return {
+      title: m.title,
+      link: normalizeLink(m.link),
+      impactScore: impact,
+    };
+  });
 
-        setMarketMoving(normalized);
-      }
+  setMarketMoving(normalized);
+}
+*/
+
+const breakingFromMarket = false;
+const normalized: MarketMovingType[] = [];
+      
 
       /* ---------- Breaking + Confidence ---------- */
       setIsBreaking(breakingFromAlerts || breakingFromMarket);

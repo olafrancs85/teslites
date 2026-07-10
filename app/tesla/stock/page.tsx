@@ -1,23 +1,22 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
+import type { Time } from "lightweight-charts";
 import TeslaAISummary from "../../Components/TeslaAISummary";
 import ScenarioCards from "../../Components/stock/ScenarioCards";
 import AIConfidenceCard from "../../Components/stock/AIConfidenceCard";
 import { generateScenarios } from "@/lib/ai/scenarioEngine";
-import { bullCaseText, bearCaseText } from "@/lib/ai/scenarioText";
 import { calculateConfidenceScore } from "@/lib/ai/confidenceEngine";
 import { getConfidenceLabel } from "@/lib/ai/confidenceLabel";
-import { updateConfidenceTrend, getTrendDirection } from "@/lib/ai/confidenceTrend";
-import ConfidenceTrend from "@/app/tesla/ConfidenceTrend";
+import { updateConfidenceTrend } from "@/lib/ai/confidenceTrend";
 import dynamic from "next/dynamic";
 import TeslaLivePanel from "../../Components/TeslaLivePanel";
 import StockCausalIntelligenceCard from "@/components/stock/StockCausalIntelligenceCard"
 import { useTeslaStockCausalIntelligence } from "@/hooks/useTeslaStockCausalIntelligence"
 import { StockCausalRequest } from "@/types/stockCausal";
+import TeslaCandlestickChart from "@/components/stock/TeslaCandlestickChart";
+import AITechnicalBrief from "@/components/stock/AITechnicalBrief";
 
-
-const TeslaLive = dynamic(() => import("@/app/tesla/TeslaLive"), {
+const TeslaLive = dynamic(() => import("../TeslaLive"), {
   ssr: false,
 });
 
@@ -31,6 +30,7 @@ interface Candle {
   high: number;
   low: number;
   close: number;
+  volume: number;
   extended?: boolean; // true if pre/post-market
 }
 
@@ -91,23 +91,14 @@ export default function TeslaStockPage() {
   } | null>(null);
 
   const [confidenceHistory, setConfidenceHistory] = useState<number[]>([]);
-useEffect(() => {
-  if (!candles.length) {
-    setCandles([
-      { time: Date.now() - 86400000 * 5, open: 210, high: 215, low: 205, close: 212 },
-      { time: Date.now() - 86400000 * 4, open: 212, high: 218, low: 210, close: 216 },
-      { time: Date.now() - 86400000 * 3, open: 216, high: 220, low: 215, close: 218 },
-      { time: Date.now() - 86400000 * 2, open: 218, high: 222, low: 217, close: 221 },
-      { time: Date.now() - 86400000 * 1, open: 221, high: 225, low: 220, close: 224 },
-    ]);
-  }
-}, []);
 
   /* -----------------------------
      FETCH DATA
   ----------------------------- */
   const fetchAll = async () => {
+  if (!candles.length) {
   setLoading(true);
+}
 
   /* -----------------------------
      STOCK HISTORY
@@ -122,8 +113,17 @@ useEffect(() => {
       console.warn("Stock API rate limit reached, keeping previous data.");
       // Do not clear candles; keep the last successful data
     } else if (historyData?.candles?.length) {
-      setCandles(historyData.candles);
+      setCandles(
+  historyData.candles.map((c: any) => ({
+    ...c,
+    time: Math.floor(c.time / 1000),
+  }))
+);
+
+console.log("Candles received:", historyData.candles.length);
+
       console.log("Stock history data:", historyData.candles);
+console.log("First candle:", historyData.candles[0]);
     }
   } catch (err) {
     console.warn("Failed to fetch stock history:", err);
@@ -167,9 +167,10 @@ useEffect(() => {
   } catch (err) {
     console.warn("Failed to fetch news:", err);
   }
-
+  
   setLastUpdated(new Date().toLocaleTimeString());
-  setLoading(false);
+  console.log("Loading finished");
+setLoading(false);
 };
 
 
@@ -275,7 +276,15 @@ useEffect(() => {
   // Keep `rsi` variable for compatibility with existing labels / UI
   const rsi = rsi14;
 
-  
+  const resistance =
+    candles.length > 0
+      ? Math.max(...candles.slice(-20).map((c) => c.high))
+      : null;
+
+  const support =
+    candles.length > 0
+      ? Math.min(...candles.slice(-20).map((c) => c.low))
+      : null;
 
   const technicalInsight = useMemo(() => {
     if (!latest) return "Technical data unavailable.";
@@ -474,8 +483,6 @@ useEffect(() => {
     setConfidenceHistory(updated);
   }, [confidenceScore]);
 
-  const confidenceDirection = getTrendDirection(confidenceHistory);
-
   const { bullActive, bearActive } = generateScenarios({
     earningsVerdict,
     technicalBias,
@@ -595,21 +602,23 @@ const causalPayload: StockCausalRequest = useMemo(() => ({
   /* -----------------------------
      GUARDS
   ----------------------------- */
-  if (loading) {
-    return (
-      <div className="p-6 text-center text-gray-400">
-        Loading Tesla stock data…
-      </div>
-    );
-  }
+  if (loading && candles.length === 0) {
+  return (
+    <div className="p-6 text-center text-gray-400">
+      Loading Tesla stock data…
+    </div>
+  );
+}
 
-  if (!loading && (!candles.length || !latest)) {
+  /*
+if (!loading && (!candles.length || !latest)) {
   return (
     <div className="p-6 text-center text-gray-400">
       Tesla stock data unavailable (API may be rate-limited). Retrying…
     </div>
   );
 }
+*/
 
   const maxPrice = Math.max(...candles.map(c => c.high));
   const minPrice = Math.min(...candles.map(c => c.low));
@@ -730,6 +739,15 @@ const causalPayload: StockCausalRequest = useMemo(() => ({
       <div className="mt-4 mb-6">
         <TeslaLivePanel candles={candles} latest={latest} />
       </div>
+      
+      <div className="mb-8">
+        <TeslaCandlestickChart
+          candles={candles}
+          support={support}
+          resistance={resistance}
+        />
+      </div>
+
       {isBreakingAlert && (
         <div className="mt-4 mb-6 rounded-lg border border-red-500/40 bg-red-500/10 p-4">
           <p className="text-sm text-gray-200 mb-1">{headline}</p>
@@ -825,7 +843,6 @@ const causalPayload: StockCausalRequest = useMemo(() => ({
       )}
 
       
-
       <div className="bg-black border border-gray-800 rounded-lg p-5 mb-8">
         <h2 className="text-lg font-semibold mb-2 text-white">
           Technical Insight
@@ -834,6 +851,26 @@ const causalPayload: StockCausalRequest = useMemo(() => ({
           {technicalInsight}
         </p>
       </div>
+
+<AITechnicalBrief
+  trend={
+    ma20 !== null &&
+    ma50 !== null &&
+    ma20 > ma50
+      ? "Bullish"
+      : ma20 !== null &&
+        ma50 !== null &&
+        ma20 < ma50
+      ? "Bearish"
+      : "Neutral"
+  }
+  rsi={rsi14}
+  ma20={ma20}
+  ma50={ma50}
+  support={support}
+  resistance={resistance}
+  confidence={confidenceScore ?? 50}
+/>
 
       {/* -----------------------------
            AI MARKET INTERPRETATION

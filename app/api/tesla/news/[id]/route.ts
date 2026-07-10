@@ -3,9 +3,11 @@ import { store } from "../store/route";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const record = store.get(params.id);
+  const { id } = await params;
+
+  const record = store.get(id);
 
   if (!record) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

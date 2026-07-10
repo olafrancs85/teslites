@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import {
   collection,
@@ -41,7 +43,7 @@ interface Innovation {
   images?: string[]; // local data URLs
 }
 
-export default function InnovationLabPage() {
+function InnovationLabContent() {
   const [innovations, setInnovations] = useState<Innovation[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ title: "", description: "", category: "" });
@@ -644,5 +646,13 @@ export default function InnovationLabPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+export default function InnovationLabPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InnovationLabContent />
+    </Suspense>
   );
 }

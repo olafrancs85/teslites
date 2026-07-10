@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useTeslaLiveIntelligence } from "../hooks/useTeslaLiveIntelligence";
-import useTeslaRSS from "@/app/hooks/useTeslaRSS";
+import useTeslaRSS from "../hooks/useTeslaRSS";
 
 export default function TeslaLivePanel() {
   const [open, setOpen] = useState(true);

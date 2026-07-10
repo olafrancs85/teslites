@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import TeslaLivePanel from "@/app/Components/TeslaLivePanel";
-import ConfidenceTrend from "@/app/Components/stock/ConfidenceTrend";
+import TeslaLivePanel from "../Components/TeslaLivePanel";
+import ConfidenceTrend from "../Components/stock/ConfidenceTrend";
 import { useTeslaLiveIntelligence } from "@/hooks/useTeslaLiveIntelligence";
 
 export default function TeslaLive() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTeslaLiveIntelligence } from "@/app/hooks/useTeslaLiveIntelligence";
+import { useTeslaLiveIntelligence } from "../hooks/useTeslaLiveIntelligence";
 
 interface ConfidencePoint {
   time: string;

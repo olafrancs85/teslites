@@ -1,53 +1,50 @@
 import { NextResponse } from "next/server";
+import YahooFinance from "yahoo-finance2";
+
+const yahooFinance = new YahooFinance();
 
 export async function GET() {
   try {
-    const apiKey = process.env.ALPHAVANTAGE_API_KEY;
+    const result: any = await yahooFinance.chart("TSLA", {
+      period1: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
+      period2: new Date(),
+      interval: "1d",
+    });
 
-    if (!apiKey) {
+    if (!result.quotes || result.quotes.length === 0) {
       return NextResponse.json(
-        { error: "Missing ALPHAVANTAGE_API_KEY" },
-        { status: 500 }
+        { error: "No historical data available" },
+        { status: 404 }
       );
     }
 
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=TSLA&outputsize=compact&apikey=${apiKey}`;
-
-    const res = await fetch(url, { cache: "no-store" });
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch Tesla stock history" },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-
-    if (!data["Time Series (Daily)"]) {
-      return NextResponse.json(
-        { error: "Alpha Vantage rate limit reached" },
-        { status: 429 }
-      );
-    }
-
-    const candles = Object.entries(data["Time Series (Daily)"])
-      .slice(0, 30)
-      .reverse()
-      .map(([date, values]: any) => ({
-        time: new Date(date).getTime(),
-        open: Number(values["1. open"]),
-        high: Number(values["2. high"]),
-        low: Number(values["3. low"]),
-        close: Number(values["4. close"]),
+    const candles = result.quotes
+      .filter(
+  (q: any) =>
+    q.open != null &&
+    q.high != null &&
+    q.low != null &&
+    q.close != null
+)
+.map((q: any) => ({
+        time: new Date(q.date!).getTime(),
+        open: q.open!,
+        high: q.high!,
+        low: q.low!,
+        close: q.close!,
+        volume: q.volume ?? 0,
       }));
 
     return NextResponse.json({ candles });
   } catch (error) {
-    console.error("Tesla Stock History API Error:", error);
-    return NextResponse.json(
-      { error: "Server error fetching stock history" },
-      { status: 500 }
-    );
+    console.error("Yahoo Finance Error:", error);
+
+return NextResponse.json(
+  {
+    error: "Failed to fetch Tesla stock history",
+    details: error instanceof Error ? error.message : String(error),
+  },
+  { status: 500 }
+);
   }
 }
