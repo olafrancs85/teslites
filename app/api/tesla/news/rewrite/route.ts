@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom"; // Make sure jsdom + @types/jsdom installed
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const src = searchParams.get("src");
+    const src = searchParams.get("url");
 
     if (!src) {
       return NextResponse.json({ error: "Missing 'src' query parameter" }, { status: 400 });
