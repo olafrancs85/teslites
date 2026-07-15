@@ -1,9 +1,9 @@
 // app/api/teslite-ai/rewrite/route.ts
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import jsdom from "jsdom";
+import { JSDOM } from "jsdom";
 
-const { JSDOM } = jsdom;
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   console.log("✅ TESLITE REWRITE API HIT");
