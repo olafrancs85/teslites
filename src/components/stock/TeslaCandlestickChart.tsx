@@ -28,14 +28,27 @@ export default function TeslaCandlestickChart({
   support,
   resistance,
 }: Props) {
-  const chartRef = useRef<HTMLDivElement>(null);
+  const priceChartRef = useRef<HTMLDivElement>(null);
+  const volumeChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!chartRef.current || candles.length === 0) return;
+    if (
+      !priceChartRef.current ||
+      !volumeChartRef.current ||
+      candles.length === 0
+    ) {
+      return;
+    }
 
-    const chart = createChart(chartRef.current, {
-      width: chartRef.current.clientWidth,
-      height: 520,
+    /*
+    =====================================================
+    PRICE CHART
+    =====================================================
+    */
+
+    const priceChart = createChart(priceChartRef.current, {
+      width: priceChartRef.current.clientWidth,
+      height: 340,
 
       layout: {
         background: { color: "#111827" },
@@ -50,7 +63,7 @@ export default function TeslaCandlestickChart({
       rightPriceScale: {
         scaleMargins: {
           top: 0.05,
-          bottom: 0.25,
+          bottom: 0.05,
         },
       },
 
@@ -60,11 +73,7 @@ export default function TeslaCandlestickChart({
       },
     });
 
-    // =============================
-    // PRICE CHART
-    // =============================
-
-    const candleSeries = chart.addCandlestickSeries({
+    const candleSeries = priceChart.addCandlestickSeries({
       upColor: "#22c55e",
       downColor: "#ef4444",
       borderUpColor: "#22c55e",
@@ -73,43 +82,19 @@ export default function TeslaCandlestickChart({
       wickDownColor: "#ef4444",
     });
 
-    const ma20Series = chart.addLineSeries({
+    const ma20Series = priceChart.addLineSeries({
       color: "#3b82f6",
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
-      priceScaleId: "right",
     });
 
-    const ma50Series = chart.addLineSeries({
+    const ma50Series = priceChart.addLineSeries({
       color: "#f59e0b",
       lineWidth: 2,
       lineStyle: LineStyle.Solid,
-      priceScaleId: "right",
     });
 
-    // =============================
-    // VOLUME PANEL
-    // =============================
-
-    const volumeSeries = chart.addHistogramSeries({
-      priceFormat: {
-        type: "volume",
-      },
-      priceScaleId: "volume",
-    });
-
-    volumeSeries.priceScale().applyOptions({
-      scaleMargins: {
-        top: 0.8,
-        bottom: 0,
-      },
-    });
-
-    // =============================
-    // CANDLE DATA
-    // =============================
-
-    const formattedCandles = candles.map((c) => ({
+    const chartCandles = candles.map((c) => ({
       time: Math.floor(c.time) as UTCTimestamp,
       open: c.open,
       high: c.high,
@@ -117,23 +102,13 @@ export default function TeslaCandlestickChart({
       close: c.close,
     }));
 
-    candleSeries.setData(formattedCandles);
+    candleSeries.setData(chartCandles);
 
-    // =============================
-    // VOLUME DATA
-    // =============================
-
-    volumeSeries.setData(
-      candles.map((c) => ({
-        time: Math.floor(c.time) as UTCTimestamp,
-        value: c.volume,
-        color: c.close >= c.open ? "#22c55e" : "#ef4444",
-      }))
-    );
-
-    // =============================
-    // MOVING AVERAGES
-    // =============================
+    /*
+    =====================================================
+    MOVING AVERAGES
+    =====================================================
+    */
 
     const calculateMA = (period: number) => {
       return candles
@@ -142,12 +117,12 @@ export default function TeslaCandlestickChart({
 
           const slice = candles.slice(index - period + 1, index + 1);
 
-          const avg =
-            slice.reduce((sum, c) => sum + c.close, 0) / period;
+          const average =
+            slice.reduce((sum, candle) => sum + candle.close, 0) / period;
 
           return {
             time: Math.floor(candles[index].time) as UTCTimestamp,
-            value: avg,
+            value: average,
           };
         })
         .filter(Boolean) as {
@@ -159,9 +134,11 @@ export default function TeslaCandlestickChart({
     ma20Series.setData(calculateMA(20));
     ma50Series.setData(calculateMA(50));
 
-    // =============================
-    // SUPPORT
-    // =============================
+    /*
+    =====================================================
+    SUPPORT & RESISTANCE
+    =====================================================
+    */
 
     if (support !== null) {
       candleSeries.createPriceLine({
@@ -174,10 +151,6 @@ export default function TeslaCandlestickChart({
       });
     }
 
-    // =============================
-    // RESISTANCE
-    // =============================
-
     if (resistance !== null) {
       candleSeries.createPriceLine({
         price: resistance,
@@ -189,9 +162,11 @@ export default function TeslaCandlestickChart({
       });
     }
 
-    // =============================
-    // AI TRADE LEVELS
-    // =============================
+    /*
+    =====================================================
+    AI TRADE LEVELS
+    =====================================================
+    */
 
     const ai = analyzeTeslaChart(candles);
 
@@ -228,9 +203,11 @@ export default function TeslaCandlestickChart({
       });
     }
 
-    // =============================
-    // AI SIGNAL MARKER
-    // =============================
+    /*
+    =====================================================
+    AI SIGNAL MARKER
+    =====================================================
+    */
 
     const latest = candles[candles.length - 1];
 
@@ -258,32 +235,130 @@ export default function TeslaCandlestickChart({
 
     candleSeries.setMarkers(markers);
 
-    // =============================
-    // RESPONSIVE WIDTH
-    // =============================
+    /*
+    =====================================================
+    VOLUME CHART
+    =====================================================
+    */
 
-    const handleResize = () => {
-      if (!chartRef.current) return;
+    const volumeChart = createChart(volumeChartRef.current, {
+      width: volumeChartRef.current.clientWidth,
+      height: 110,
 
-      chart.applyOptions({
-        width: chartRef.current.clientWidth,
-      });
-    };
+      layout: {
+        background: { color: "#111827" },
+        textColor: "#9ca3af",
+      },
 
-    window.addEventListener("resize", handleResize);
+      grid: {
+        vertLines: { color: "#374151" },
+        horzLines: { color: "#374151" },
+      },
 
-    chart.timeScale().fitContent();
+      rightPriceScale: {
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.05,
+        },
+      },
+
+      timeScale: {
+        borderColor: "#374151",
+        timeVisible: true,
+      },
+    });
+
+    const volumeSeries = volumeChart.addHistogramSeries({
+      priceFormat: {
+        type: "volume",
+      },
+      priceScaleId: "",
+    });
+
+    volumeSeries.setData(
+      candles.map((c) => ({
+        time: Math.floor(c.time) as UTCTimestamp,
+        value: c.volume,
+        color: c.close >= c.open ? "#22c55e" : "#ef4444",
+      }))
+    );
+
+    /*
+    =====================================================
+    SYNCHRONIZE BOTH CHARTS
+    =====================================================
+    */
+
+    let syncing = false;
+
+    priceChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (!range || syncing) return;
+
+      syncing = true;
+      volumeChart.timeScale().setVisibleLogicalRange(range);
+      syncing = false;
+    });
+
+    volumeChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (!range || syncing) return;
+
+      syncing = true;
+      priceChart.timeScale().setVisibleLogicalRange(range);
+      syncing = false;
+    });
+
+    priceChart.timeScale().fitContent();
+    volumeChart.timeScale().fitContent();
+
+    /*
+    =====================================================
+    RESPONSIVE RESIZING
+    =====================================================
+    */
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (priceChartRef.current) {
+        priceChart.applyOptions({
+          width: priceChartRef.current.clientWidth,
+        });
+      }
+
+      if (volumeChartRef.current) {
+        volumeChart.applyOptions({
+          width: volumeChartRef.current.clientWidth,
+        });
+      }
+    });
+
+    resizeObserver.observe(priceChartRef.current);
+    resizeObserver.observe(volumeChartRef.current);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
+      resizeObserver.disconnect();
+      priceChart.remove();
+      volumeChart.remove();
     };
   }, [candles, support, resistance]);
 
   return (
-    <div
-      ref={chartRef}
-      className="w-full h-[520px] rounded-xl overflow-hidden border border-white/10"
-    />
+    <div className="w-full rounded-xl overflow-hidden border border-white/10">
+      {/* PRICE CHART */}
+      <div
+        ref={priceChartRef}
+        className="w-full h-[340px]"
+      />
+
+      {/* VOLUME PANEL */}
+      <div className="border-t border-white/10">
+        <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-gray-500">
+          Volume
+        </div>
+
+        <div
+          ref={volumeChartRef}
+          className="w-full h-[110px]"
+        />
+      </div>
+    </div>
   );
 }
