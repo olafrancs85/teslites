@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import type { Time } from "lightweight-charts";
 import TeslaAISummary from "../../Components/TeslaAISummary";
 import ScenarioCards from "../../Components/stock/ScenarioCards";
 import AIConfidenceCard from "../../Components/stock/AIConfidenceCard";
@@ -84,12 +83,7 @@ export default function TeslaStockPage() {
   const [headline, setHeadline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
-  const [hoveredCrossover, setHoveredCrossover] = useState<{
-    x: number;
-    y: number;
-    type: "bullish" | "bearish";
-  } | null>(null);
-
+  
   const [confidenceHistory, setConfidenceHistory] = useState<number[]>([]);
 
   /* -----------------------------
@@ -620,92 +614,8 @@ if (!loading && (!candles.length || !latest)) {
 }
 */
 
-  const maxPrice = Math.max(...candles.map(c => c.high));
-  const minPrice = Math.min(...candles.map(c => c.low));
-  const scaleY = (price: number) =>
-    280 - ((price - minPrice) / (maxPrice - minPrice)) * 260;
-
-  const buildMAPoints = (period: number) => {
-    if (candles.length < period) return [];
-
-    return candles
-      .map((_, index) => {
-        if (index < period - 1) return null;
-
-        const slice = candles.slice(index - period + 1, index + 1);
-        const avg = slice.reduce((sum, c) => sum + c.close, 0) / period;
-
-        return {
-          x: index * (1000 / candles.length),
-          y: scaleY(avg),
-        };
-      })
-      .filter(Boolean) as { x: number; y: number }[];
-  };
-
-  const ma20Points = buildMAPoints(20);
-  const ma50Points = buildMAPoints(50);
-
-  const getLastCrossover = () => {
-    if (ma20Points.length < 2 || ma50Points.length < 2) return null;
-
-    const len = Math.min(ma20Points.length, ma50Points.length);
-
-    const prevDiff = ma20Points[len - 2].y - ma50Points[len - 2].y;
-    const currDiff = ma20Points[len - 1].y - ma50Points[len - 1].y;
-
-    if (prevDiff <= 0 && currDiff > 0) {
-      return {
-        type: "bullish",
-        label: "Bullish MA Crossover",
-        confidence: "Positive momentum forming",
-      };
-    }
-
-    if (prevDiff >= 0 && currDiff < 0) {
-      return {
-        type: "bearish",
-        label: "Bearish MA Crossover",
-        confidence: "Downward momentum increasing",
-      };
-    }
-
-    return {
-      type: "neutral",
-      label: "No Recent Crossover",
-      confidence: "Trend continuation",
-    };
-  };
-
-  const maSignal = getLastCrossover();
-
-  const crossoverPoints = candles
-    .map((candle, index) => {
-      if (index < 50) return null; // need enough data for MA50
-
-      const ma20Prev =
-        candles
-          .slice(index - 20, index)
-          .reduce((sum, c) => sum + c.close, 0) / 20;
-      const ma50Prev =
-        candles
-          .slice(index - 50, index)
-          .reduce((sum, c) => sum + c.close, 0) / 50;
-
-      const ma20Curr =
-        candles.slice(index - 19, index + 1).reduce((sum, c) => sum + c.close, 0) / 20;
-      const ma50Curr =
-        candles.slice(index - 49, index + 1).reduce((sum, c) => sum + c.close, 0) / 50;
-
-      if (ma20Prev < ma50Prev && ma20Curr > ma50Curr) {
-        return { index, type: "bullish" };
-      } else if (ma20Prev > ma50Prev && ma20Curr < ma50Curr) {
-        return { index, type: "bearish" };
-      }
-      return null;
-    })
-    .filter(Boolean) as { index: number; type: "bullish" | "bearish" }[];
-
+  
+  
   /* -----------------------------
      RENDER
   ----------------------------- */
@@ -717,7 +627,7 @@ if (!loading && (!candles.length || !latest)) {
           <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           Live updating (30s)
         </span>
-        {process.env.NODE_ENV === "development" ? null : <TeslaLive />}
+        <TeslaLive candles={candles} latest={latest} />
 
 
 
@@ -733,13 +643,7 @@ if (!loading && (!candles.length || !latest)) {
         hasEarnings={Boolean(earnings)}
         headline={headline ?? undefined}
       />
-      {/* ======================
-          Tesla Live Panel
-      ====================== */}
-      <div className="mt-4 mb-6">
-        <TeslaLivePanel candles={candles} latest={latest} />
-      </div>
-      
+            
       <div className="mb-8">
         <TeslaCandlestickChart
           candles={candles}
@@ -902,145 +806,7 @@ if (!loading && (!candles.length || !latest)) {
         </p>
       </div>
 
-      {/* PRICE CHART */}
-      <div className="bg-black rounded-lg p-4 border border-gray-800 mb-8">
-        <svg viewBox="0 0 1000 300" className="w-full h-64">
 
-          {/* PRICE LINE */}
-          {candles.map((candle, index) => {
-            if (index === 0) return null;
-            const prev = candles[index - 1];
-            const x1 = (index - 1) * (1000 / candles.length);
-            const x2 = index * (1000 / candles.length);
-
-            return (
-              <line
-                key={`price-${index}`}
-                x1={x1}
-                y1={scaleY(prev.close)}
-                x2={x2}
-                y2={scaleY(candle.close)}
-                stroke={candle.extended ? "#6366f1" : "#22c55e"}
-                strokeWidth={candle.extended ? 1 : 2}
-                strokeDasharray={candle.extended ? "4,2" : undefined}
-              />
-            );
-          })}
-
-          {/* MA 20 */}
-          {ma20Points.map((point, index) => {
-            if (index === 0) return null;
-            const prev = ma20Points[index - 1];
-
-            return (
-              <line
-                key={`ma20-${index}`}
-                x1={prev.x}
-                y1={prev.y}
-                x2={point.x}
-                y2={point.y}
-                stroke="#3b82f6"
-                strokeWidth="2"
-                strokeDasharray="4 2"
-              />
-            );
-          })}
-
-          {/* MA 50 */}
-          {ma50Points.map((point, index) => {
-            if (index === 0) return null;
-            const prev = ma50Points[index - 1];
-
-            return (
-              <line
-                key={`ma50-${index}`}
-                x1={prev.x}
-                y1={prev.y}
-                x2={point.x}
-                y2={point.y}
-                stroke="#f59e0b"
-                strokeWidth="2"
-              />
-            );
-          })}
-
-          {/* Crossover markers */}
-          {crossoverPoints.map((point, i) => {
-            const x = point.index * (1000 / candles.length);
-            const y = scaleY(candles[point.index].close);
-
-            return (
-              <g key={i}>
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={5}
-                  fill={point.type === "bullish" ? "#22c55e" : "#ef4444"}
-                  stroke="#ffffff"
-                  strokeWidth={1}
-                  onMouseEnter={() =>
-                    setHoveredCrossover({ x, y, type: point.type })
-                  }
-                  onMouseLeave={() => setHoveredCrossover(null)}
-                />
-              </g>
-            );
-          })}
-
-          {hoveredCrossover && (
-            <text
-              x={hoveredCrossover.x + 10}
-              y={hoveredCrossover.y - 10}
-              fill="#fff"
-              fontSize="12"
-              fontWeight="bold"
-              pointerEvents="none"
-            >
-              {hoveredCrossover.type === "bullish"
-                ? "Bullish MA20/50 Crossover"
-                : "Bearish MA20/50 Crossover"}
-            </text>
-          )}
-        </svg>
-
-        <div className="flex gap-4 text-xs text-gray-400 mt-2">
-          <span className="flex items-center gap-1">
-            <span className="h-1 w-4 bg-green-500 inline-block" /> Price
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1 w-4 bg-blue-500 inline-block" /> MA (20)
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1 w-4 bg-yellow-500 inline-block" /> MA (50)
-          </span>
-        </div>
-
-        <div className="flex gap-4 text-gray-400 text-xs mt-2">
-          <div className="flex items-center gap-1">
-            <span className="h-2 w-4 bg-green-500" />
-            Regular Hours
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="h-2 w-4 bg-purple-500" />
-            Extended Hours
-          </div>
-        </div>
-
-        {maSignal && (
-          <div
-            className={`mt-4 rounded-xl p-4 text-sm border ${
-              maSignal.type === "bullish"
-                ? "border-green-500/40 bg-green-500/10 text-green-300"
-                : maSignal.type === "bearish"
-                ? "border-red-500/40 bg-red-500/10 text-red-300"
-                : "border-gray-500/30 bg-gray-500/10 text-gray-300"
-            }`}
-          >
-            <p className="font-semibold">{maSignal.label}</p>
-            <p className="opacity-80">{maSignal.confidence}</p>
-          </div>
-        )}
-      </div>
 
       <div className="bg-black border border-gray-800 rounded-lg p-6 mb-8">
         <h2 className="text-xl font-semibold mb-3">
