@@ -7,6 +7,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { analyzeTeslaChart } from "@/lib/teslaAiSignalEngine";
+
 type Candle = {
   time: number;
   open: number;
@@ -34,7 +35,7 @@ export default function TeslaCandlestickChart({
 
     const chart = createChart(chartRef.current, {
       width: chartRef.current.clientWidth,
-      height: 420,
+      height: 520,
 
       layout: {
         background: { color: "#111827" },
@@ -52,12 +53,44 @@ export default function TeslaCandlestickChart({
           bottom: 0.25,
         },
       },
+
+      timeScale: {
+        borderColor: "#374151",
+        timeVisible: true,
+      },
     });
 
-    // Candles
-    const candleSeries = chart.addCandlestickSeries();
+    // =============================
+    // PRICE CHART
+    // =============================
 
-    // Volume
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
+
+    const ma20Series = chart.addLineSeries({
+      color: "#3b82f6",
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      priceScaleId: "right",
+    });
+
+    const ma50Series = chart.addLineSeries({
+      color: "#f59e0b",
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      priceScaleId: "right",
+    });
+
+    // =============================
+    // VOLUME PANEL
+    // =============================
+
     const volumeSeries = chart.addHistogramSeries({
       priceFormat: {
         type: "volume",
@@ -65,40 +98,42 @@ export default function TeslaCandlestickChart({
       priceScaleId: "volume",
     });
 
-    // Moving averages
-    const ma20Series = chart.addLineSeries({
-      color: "#3b82f6",
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8,
+        bottom: 0,
+      },
     });
 
-    const ma50Series = chart.addLineSeries({
-      color: "#f59e0b",
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-    });
+    // =============================
+    // CANDLE DATA
+    // =============================
 
-    // Candles
-    candleSeries.setData(
-      candles.map((c) => ({
-        time: Math.floor(c.time / 1000) as UTCTimestamp,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      }))
-    );
+    const formattedCandles = candles.map((c) => ({
+      time: Math.floor(c.time) as UTCTimestamp,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
 
-    // Volume
+    candleSeries.setData(formattedCandles);
+
+    // =============================
+    // VOLUME DATA
+    // =============================
+
     volumeSeries.setData(
       candles.map((c) => ({
-        time: Math.floor(c.time / 1000) as UTCTimestamp,
+        time: Math.floor(c.time) as UTCTimestamp,
         value: c.volume,
         color: c.close >= c.open ? "#22c55e" : "#ef4444",
       }))
     );
 
-    // -------- Moving Average Helper --------
+    // =============================
+    // MOVING AVERAGES
+    // =============================
 
     const calculateMA = (period: number) => {
       return candles
@@ -111,7 +146,7 @@ export default function TeslaCandlestickChart({
             slice.reduce((sum, c) => sum + c.close, 0) / period;
 
           return {
-            time: Math.floor(candles[index].time / 1000) as UTCTimestamp,
+            time: Math.floor(candles[index].time) as UTCTimestamp,
             value: avg,
           };
         })
@@ -124,7 +159,10 @@ export default function TeslaCandlestickChart({
     ma20Series.setData(calculateMA(20));
     ma50Series.setData(calculateMA(50));
 
-    // Support
+    // =============================
+    // SUPPORT
+    // =============================
+
     if (support !== null) {
       candleSeries.createPriceLine({
         price: support,
@@ -136,7 +174,10 @@ export default function TeslaCandlestickChart({
       });
     }
 
-    // Resistance
+    // =============================
+    // RESISTANCE
+    // =============================
+
     if (resistance !== null) {
       candleSeries.createPriceLine({
         price: resistance,
@@ -148,80 +189,101 @@ export default function TeslaCandlestickChart({
       });
     }
 
-   const ai = analyzeTeslaChart(candles);
-   console.log(ai);
+    // =============================
+    // AI TRADE LEVELS
+    // =============================
 
-   // AI Trade Levels
-if (ai.entry !== null) {
-  candleSeries.createPriceLine({
-    price: ai.entry,
-    color: "#3b82f6",
-    lineWidth: 2,
-    lineStyle: LineStyle.Solid,
-    axisLabelVisible: true,
-    title: "Entry",
-  });
-}
+    const ai = analyzeTeslaChart(candles);
 
-if (ai.stopLoss !== null) {
-  candleSeries.createPriceLine({
-    price: ai.stopLoss,
-    color: "#ef4444",
-    lineWidth: 2,
-    lineStyle: LineStyle.Dashed,
-    axisLabelVisible: true,
-    title: "Stop",
-  });
-}
+    if (ai.entry !== null) {
+      candleSeries.createPriceLine({
+        price: ai.entry,
+        color: "#3b82f6",
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: "Entry",
+      });
+    }
 
-if (ai.takeProfit !== null) {
-  candleSeries.createPriceLine({
-    price: ai.takeProfit,
-    color: "#22c55e",
-    lineWidth: 2,
-    lineStyle: LineStyle.Dashed,
-    axisLabelVisible: true,
-    title: "Target",
-  });
-}
+    if (ai.stopLoss !== null) {
+      candleSeries.createPriceLine({
+        price: ai.stopLoss,
+        color: "#ef4444",
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "Stop",
+      });
+    }
 
-const latest = candles[candles.length - 1];
+    if (ai.takeProfit !== null) {
+      candleSeries.createPriceLine({
+        price: ai.takeProfit,
+        color: "#22c55e",
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "Target",
+      });
+    }
 
-const markers = [];
+    // =============================
+    // AI SIGNAL MARKER
+    // =============================
 
-if (ai.signal === "BUY") {
-  markers.push({
-    time: Math.floor(latest.time / 1000) as UTCTimestamp,
-    position: "belowBar" as const,
-    color: "#22c55e",
-    shape: "arrowUp" as const,
-    text: `BUY ${ai.confidence}%`,
-  });
-}
+    const latest = candles[candles.length - 1];
 
-if (ai.signal === "SELL") {
-  markers.push({
-    time: Math.floor(latest.time / 1000) as UTCTimestamp,
-    position: "aboveBar" as const,
-    color: "#ef4444",
-    shape: "arrowDown" as const,
-    text: `SELL ${ai.confidence}%`,
-  });
-}
+    const markers = [];
 
-candleSeries.setMarkers(markers);
+    if (ai.signal === "BUY") {
+      markers.push({
+        time: Math.floor(latest.time) as UTCTimestamp,
+        position: "belowBar" as const,
+        color: "#22c55e",
+        shape: "arrowUp" as const,
+        text: `BUY ${ai.confidence}%`,
+      });
+    }
+
+    if (ai.signal === "SELL") {
+      markers.push({
+        time: Math.floor(latest.time) as UTCTimestamp,
+        position: "aboveBar" as const,
+        color: "#ef4444",
+        shape: "arrowDown" as const,
+        text: `SELL ${ai.confidence}%`,
+      });
+    }
+
+    candleSeries.setMarkers(markers);
+
+    // =============================
+    // RESPONSIVE WIDTH
+    // =============================
+
+    const handleResize = () => {
+      if (!chartRef.current) return;
+
+      chart.applyOptions({
+        width: chartRef.current.clientWidth,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
 
     chart.timeScale().fitContent();
 
     return () => {
+      window.removeEventListener("resize", handleResize);
       chart.remove();
     };
   }, [candles, support, resistance]);
 
   return (
-  <div
-    ref={chartRef}
-    className="w-full h-[420px]"
-  />
-);
+    <div
+      ref={chartRef}
+      className="w-full h-[520px] rounded-xl overflow-hidden border border-white/10"
+    />
+  );
 }
