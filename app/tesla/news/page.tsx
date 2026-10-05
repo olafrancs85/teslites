@@ -1,6 +1,5 @@
 "use client";
-export const dynamic = "force-dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import CommentsSection from "@/components/CommentsSection";
@@ -24,6 +23,7 @@ interface RewrittenArticle {
   source: string;
   url: string;
   publishedAt: string;
+  image: string;
 }
 
 const articleStyles = `
@@ -66,53 +66,215 @@ const articleStyles = `
 ============================= */
 function TeslaNewsContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const src = searchParams.get("src") ?? "";
+const router = useRouter();
+
+const src = searchParams.get("src") ?? "";
+
+const articleImage =
+  searchParams.get("image") ?? "";
+
+const requestedPage = Math.max(
+  1,
+  Number(searchParams.get("page") || "1")
+);
 
   /* ---- LIST STATE ---- */
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [listLoading, setListLoading] = useState(true);
-  const [listError, setListError] = useState("");
+const [listLoading, setListLoading] = useState(true);
+const [loadingMore, setLoadingMore] = useState(false);
+const [listError, setListError] = useState("");
+const [page, setPage] = useState(1);
+const [hasMore, setHasMore] = useState(true);
+const [hasLoadedInitialPage, setHasLoadedInitialPage] =
+  useState(false);
+
+  const hasStartedInitialFetch = useRef(false);
 
   /* ---- ARTICLE STATE ---- */
   const [article, setArticle] = useState<RewrittenArticle | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
   const [articleError, setArticleError] = useState("");
 
+  const ARTICLE_CACHE_PREFIX = "teslites_article_";
+
+  const NEWS_SCROLL_KEY =
+  "teslites_news_scroll_position";
+
   /* =============================
      MODE 1: NEWS LIST
   ============================= */
   useEffect(() => {
-    if (src) return;
+  // Article mode does not load the news list.
+  if (src) return;
 
+  // Prevent the initial request from starting more than once.
+  // This also protects against React Strict Mode running
+  // the effect twice during development.
+  if (hasStartedInitialFetch.current) return;
+
+  // Mark it as started BEFORE making the request.
+  hasStartedInitialFetch.current = true;
+
+  async function fetchNews() {
     setListLoading(true);
     setListError("");
-    setArticle(null);
 
-    async function fetchNews() {
-      try {
-        const res = await fetch("/api/teslite-ai/live/tesla-news", {
+    try {
+      console.log(
+        "📰 Loading Tesla News page:",
+        requestedPage
+      );
+
+      const res = await fetch(
+        `/api/teslite-ai/live/tesla-news?page=${requestedPage}`,
+        {
           cache: "no-store",
-        });
+        }
+      );
 
-        if (!res.ok) {
-          setListError("Failed to load Tesla news");
-          setListLoading(false);
-          return;
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(
+            "News service is temporarily busy. Please try again in a few seconds."
+          );
         }
 
-        const data = await res.json();
-        setNews(data.news || []);
-      } catch (err) {
-        console.error("News Fetch Error:", err);
-        setListError("Error fetching Tesla news");
-      } finally {
-        setListLoading(false);
+        throw new Error(
+          `Failed to load news page ${requestedPage}`
+        );
       }
+
+      const data = await res.json();
+
+      const pageNews: NewsItem[] =
+        data.news || [];
+
+      setNews(pageNews);
+      setPage(requestedPage);
+
+      setHasMore(
+        data.hasMore === true &&
+        pageNews.length > 0
+      );
+
+      setHasLoadedInitialPage(true);
+
+      console.log(
+        "✅ Tesla News page loaded:",
+        {
+          page: requestedPage,
+          articles: pageNews.length,
+          hasMore: data.hasMore,
+          source: data.source,
+          totalArticles: data.totalArticles,
+        }
+      );
+    } catch (err) {
+      console.error(
+        "News Fetch Error:",
+        err
+      );
+
+      setListError(
+        err instanceof Error
+          ? err.message
+          : "Error fetching Tesla news"
+      );
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  fetchNews();
+}, [src, requestedPage]);
+
+  async function loadMoreNews() {
+  if (loadingMore || !hasMore) {
+    return;
+  }
+
+  try {
+    setLoadingMore(true);
+    setListError("");
+
+    const nextPage = page + 1;
+
+    console.log(
+      "📰 Loading Tesla News page:",
+      nextPage
+    );
+
+    const res = await fetch(
+      `/api/teslite-ai/live/tesla-news?page=${nextPage}`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        throw new Error(
+          "News service is temporarily busy. Please try again in a few seconds."
+        );
+      }
+
+      throw new Error(
+        `Failed to load page ${nextPage}`
+      );
     }
 
-    fetchNews();
-  }, [src]);
+    const data = await res.json();
+
+    const incomingNews: NewsItem[] =
+      data.news || [];
+
+    setNews((previousNews) => {
+      const existingUrls = new Set(
+        previousNews.map(
+          (item) => item.url
+        )
+      );
+
+      const newArticles =
+        incomingNews.filter(
+          (item) =>
+            !existingUrls.has(item.url)
+        );
+
+      return [
+        ...previousNews,
+        ...newArticles,
+      ];
+    });
+
+    setPage(nextPage);
+
+    router.push(
+  `/tesla/news?page=${nextPage}`,
+  {
+    scroll: false,
+  }
+);
+
+    setHasMore(
+      data.hasMore !== false &&
+      incomingNews.length > 0
+    );
+  } catch (error) {
+    console.error(
+      "Load More News Error:",
+      error
+    );
+
+    setListError(
+      error instanceof Error
+        ? error.message
+        : "Unable to load older Tesla news."
+    );
+  } finally {
+    setLoadingMore(false);
+  }
+}
 
   /* =============================
      MODE 2: ARTICLE READER
@@ -120,9 +282,45 @@ function TeslaNewsContent() {
   useEffect(() => {
     if (!src) return;
 
+    let cancelled = false;
+    const cacheKey = `${ARTICLE_CACHE_PREFIX}${src}`;
+
     setArticle(null);
     setArticleLoading(true);
     setArticleError("");
+
+    try {
+      const cachedArticle = sessionStorage.getItem(cacheKey);
+
+      if (cachedArticle) {
+        const parsedArticle =
+  JSON.parse(cachedArticle) as RewrittenArticle;
+
+if (
+  parsedArticle.title &&
+  parsedArticle.summary &&
+  parsedArticle.content &&
+  parsedArticle.source &&
+  parsedArticle.url &&
+  parsedArticle.publishedAt
+) {
+  const cachedFinalArticle: RewrittenArticle = {
+    ...parsedArticle,
+    image:
+      parsedArticle.image ||
+      articleImage,
+  };
+
+  setArticle(cachedFinalArticle);
+          setArticleLoading(false);
+          return () => {
+            cancelled = true;
+          };
+        }
+      }
+    } catch (cacheError) {
+      console.warn("Could not read cached article:", cacheError);
+    }
 
     async function fetchArticle() {
       try {
@@ -134,26 +332,26 @@ function TeslaNewsContent() {
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));
           const errorMsg = errorData?.error || `Error ${res.status}`;
-          setArticleError(`Unable to load article: ${errorMsg}`);
-          setArticleLoading(false);
+
+          if (!cancelled) {
+            setArticleError(`Unable to load article: ${errorMsg}`);
+          }
+
           return;
         }
 
         const data = await res.json();
 
         if (!data?.title) {
-          setArticleError("Article title is missing");
-          setArticleLoading(false);
+          if (!cancelled) setArticleError("Article title is missing");
           return;
         }
 
         if (!data?.content) {
-          setArticleError("Article content is unavailable");
-          setArticleLoading(false);
+          if (!cancelled) setArticleError("Article content is unavailable");
           return;
         }
 
-        // Provide fallback summary if missing
         const summary = data?.summary || "Summary unavailable for this article.";
 
         let cleanedContent = data.content
@@ -179,24 +377,81 @@ function TeslaNewsContent() {
           cleanedContent = `<p>${cleanedContent}</p>`;
         }
 
-        setArticle({
-          title: data.title,
-          summary: summary,
-          content: cleanedContent,
-          source: data.source || new URL(src).hostname || "Unknown",
-          url: data.url || src,
-          publishedAt: data.publishedAt || new Date().toISOString(),
-        });
+        const finalArticle: RewrittenArticle = {
+  title: data.title,
+  summary,
+  content: cleanedContent,
+  source:
+    data.source ||
+    new URL(src).hostname ||
+    "Unknown",
+  url: data.url || src,
+  publishedAt:
+    data.publishedAt ||
+    new Date().toISOString(),
+  image: articleImage,
+};
+
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(finalArticle));
+          console.log("Rewritten article cached:", src);
+        } catch (cacheError) {
+          console.warn("Could not cache article:", cacheError);
+        }
+
+        if (!cancelled) {
+          setArticle(finalArticle);
+        }
       } catch (err) {
         console.error("Article Fetch Error:", err);
-        setArticleError("Unable to load article. Please try again later.");
+
+        if (!cancelled) {
+          setArticleError("Unable to load article. Please try again later.");
+        }
       } finally {
-        setArticleLoading(false);
+        if (!cancelled) {
+          setArticleLoading(false);
+        }
       }
     }
 
     fetchArticle();
+
+    return () => {
+      cancelled = true;
+    };
   }, [src]);
+
+  useEffect(() => {
+  if (src) return;
+
+  const savedScrollPosition =
+    sessionStorage.getItem(
+      NEWS_SCROLL_KEY
+    );
+
+  if (!savedScrollPosition) {
+    return;
+  }
+
+  const scrollPosition =
+    Number(savedScrollPosition);
+
+  if (!Number.isFinite(scrollPosition)) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: scrollPosition,
+      behavior: "instant",
+    });
+  });
+
+  sessionStorage.removeItem(
+    NEWS_SCROLL_KEY
+  );
+}, [src]);
 
   /* =============================
      RENDER: ARTICLE VIEW
@@ -205,7 +460,14 @@ function TeslaNewsContent() {
     return (
       <div className="max-w-3xl mx-auto py-10 px-4">
         <button
-          onClick={() => router.push("/tesla/news")}
+          onClick={() => {
+  router.push(
+    `/tesla/news?page=${page}`,
+    {
+      scroll: false,
+    }
+  );
+}}
           className="mb-6 text-sm text-red-600 hover:underline"
         >
           ← Back to Tesla News
@@ -220,6 +482,15 @@ function TeslaNewsContent() {
         {article && (
           <>
             <style>{articleStyles}</style>
+
+            {article.image && (
+  <img
+    src={article.image}
+    alt={article.title}
+    className="w-full max-h-[420px] object-cover rounded-lg mb-6"
+  />
+)}
+
             <h1 className="text-3xl font-bold mb-4">{article.title}</h1>
 
             <div className="text-sm text-gray-500 mb-6">
@@ -227,7 +498,7 @@ function TeslaNewsContent() {
             </div>
 
             <div className="bg-white border-l-4 border-red-500 p-4 mb-6 text-black">
-              <strong>Tesla AI Summary:</strong>
+              <strong>Summary:</strong>
               <p className="mt-2">{article.summary}</p>
             </div>
 
@@ -269,9 +540,23 @@ function TeslaNewsContent() {
         {news.map((item, idx) => (
           <div
             key={idx}
-            onClick={() =>
-              router.push(`/tesla/news?src=${encodeURIComponent(item.url)}`)
-            }
+         onClick={() => {
+  sessionStorage.setItem(
+    NEWS_SCROLL_KEY,
+    String(window.scrollY)
+  );
+
+  router.push(
+    `/tesla/news?page=${page}&src=${encodeURIComponent(
+      item.url
+    )}&image=${encodeURIComponent(
+      item.image || ""
+    )}`,
+    {
+      scroll: false,
+    }
+  );
+}}
             className="cursor-pointer bg-white shadow-sm border rounded-lg p-4 hover:shadow-md transition"
           >
             {item.image && (
@@ -294,6 +579,21 @@ function TeslaNewsContent() {
           </div>
         ))}
       </div>
+
+{hasMore && news.length > 0 && (
+  <div className="flex justify-center mt-8">
+    <button
+      onClick={loadMoreNews}
+      disabled={loadingMore}
+      className="px-6 py-3 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+    >
+      {loadingMore
+        ? "Loading older news..."
+        : "Load More News"}
+    </button>
+  </div>
+)}
+
     </div>
   );
 }

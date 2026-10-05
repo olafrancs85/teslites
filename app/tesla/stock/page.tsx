@@ -4,7 +4,6 @@ import TeslaAISummary from "../../Components/TeslaAISummary";
 import ScenarioCards from "../../Components/stock/ScenarioCards";
 import AIConfidenceCard from "../../Components/stock/AIConfidenceCard";
 import { generateScenarios } from "@/lib/ai/scenarioEngine";
-import { calculateConfidenceScore } from "@/lib/ai/confidenceEngine";
 import { getConfidenceLabel } from "@/lib/ai/confidenceLabel";
 import { updateConfidenceTrend } from "@/lib/ai/confidenceTrend";
 import dynamic from "next/dynamic";
@@ -14,6 +13,25 @@ import { useTeslaStockCausalIntelligence } from "@/hooks/useTeslaStockCausalInte
 import { StockCausalRequest } from "@/types/stockCausal";
 import TeslaCandlestickChart from "@/components/stock/TeslaCandlestickChart";
 import AITechnicalBrief from "@/components/stock/AITechnicalBrief";
+import { calculateMACD } from "@/lib/technical/calculateMACD";
+import {
+  synthesizeTechnicalSignal,
+} from "@/lib/technical/synthesizeTechnicalSignal";
+import { generateTradingPlan } from "@/lib/technical/generateTradingPlan";
+import { trendEngine } from "@/lib/ai/trendEngine";
+import { momentumEngine } from "@/lib/ai/momentumEngine";
+import { volumeEngine } from "@/lib/ai/volumeEngine";
+import { priceActionEngine } from "@/lib/ai/priceActionEngine";
+import { riskEngine } from "@/lib/ai/riskEngine";
+import { decisionEngine } from "@/lib/ai/decisionEngine";
+import { marketRegimeEngine } from "@/lib/ai/marketRegimeEngine";
+import { weightEngine } from "@/lib/ai/weightEngine";
+import AIAnalysisPanel from "@/components/tesla/AIAnalysisPanel";
+import { newsEngine } from "@/lib/ai/newsEngine";
+import { explanationEngine } from "@/lib/ai/explanationEngine";
+import { multiTimeframeEngine } from "@/lib/ai/multiTimeframeEngine";
+import {  supportResistanceEngine,} from "@/lib/ai/supportResistanceEngine";
+
 
 const TeslaLive = dynamic(() => import("../TeslaLive"), {
   ssr: false,
@@ -79,6 +97,8 @@ export default function TeslaStockPage() {
      STATE (DO NOT REORDER)
   ----------------------------- */
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [weeklyCandles, setWeeklyCandles] = useState<Candle[]>([]);
+const [monthlyCandles, setMonthlyCandles] = useState<Candle[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,38 +110,191 @@ export default function TeslaStockPage() {
      FETCH DATA
   ----------------------------- */
   const fetchAll = async () => {
-  if (!candles.length) {
-  setLoading(true);
-}
+    if (!candles.length) {
+    setLoading(true);
+  }
 
   /* -----------------------------
      STOCK HISTORY
   ----------------------------- */
+  let requestId = "";
+
   try {
-    const historyRes = await fetch("/api/teslite-ai/live/tesla-stock-history", {
+        const requestId = Math.random().toString(36).substring(2, 12);
+
+    const historyUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/api/teslite-ai/live/tesla-stock-history?requestId=${requestId}`
+        : `/api/teslite-ai/live/tesla-stock-history?requestId=${requestId}`;
+
+        const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+            controller.abort();
+    }, 15000);
+
+    const historyRes = await fetch(historyUrl, {
       cache: "no-store",
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
+
+    console.log(
+            historyRes.status,
+      requestId
+    );
+
     const historyData = await historyRes.json();
 
+    console.log(
+            requestId,
+      historyData
+    );
+
+    console.log(
+            requestId,
+      historyData?.candles?.length
+    );
+
     if (historyRes.status === 429 || historyData.error) {
-      console.warn("Stock API rate limit reached, keeping previous data.");
-      // Do not clear candles; keep the last successful data
+      console.warn(
+        "Stock API rate limit reached, keeping previous data."
+      );
     } else if (historyData?.candles?.length) {
       setCandles(
-  historyData.candles.map((c: any) => ({
-    ...c,
-    time: Math.floor(c.time / 1000),
-  }))
-);
-
-console.log("Candles received:", historyData.candles.length);
-
-      console.log("Stock history data:", historyData.candles);
-console.log("First candle:", historyData.candles[0]);
+        historyData.candles.map((c: any) => ({
+          ...c,
+          time: Math.floor(c.time / 1000),
+        }))
+      );
     }
-  } catch (err) {
-    console.warn("Failed to fetch stock history:", err);
+  } catch (err: any) {
+    console.error(
+      "STOCK HISTORY FETCH ERROR:",
+      err?.name,
+      err?.message,
+      err
+    );
   }
+
+/* -----------------------------
+   WEEKLY STOCK HISTORY
+----------------------------- */
+try {
+  const weeklyRequestId =
+    Math.random().toString(36).substring(2, 12);
+
+  const weeklyUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/teslite-ai/live/tesla-stock-history?timeframe=1W&requestId=${weeklyRequestId}`
+      : `/api/teslite-ai/live/tesla-stock-history?timeframe=1W&requestId=${weeklyRequestId}`;
+
+  console.log(
+    "BEFORE WEEKLY HISTORY FETCH:",
+    weeklyRequestId
+  );
+
+  const weeklyRes = await fetch(weeklyUrl, {
+    cache: "no-store",
+  });
+
+  const weeklyData = await weeklyRes.json();
+
+  console.log(
+    "WEEKLY HISTORY DATA RECEIVED:",
+    weeklyRequestId,
+    weeklyData
+  );
+
+  console.log(
+    "WEEKLY CANDLE COUNT:",
+    weeklyRequestId,
+    weeklyData?.candles?.length
+  );
+
+  if (
+    weeklyRes.status === 429 ||
+    weeklyData?.error
+  ) {
+    console.warn(
+      "Weekly stock history unavailable."
+    );
+  } else if (weeklyData?.candles?.length) {
+    setWeeklyCandles(
+      weeklyData.candles.map((c: any) => ({
+        ...c,
+        time: Math.floor(c.time / 1000),
+      }))
+    );
+  }
+} catch (err: any) {
+  console.error(
+    "WEEKLY STOCK HISTORY FETCH ERROR:",
+    err?.name,
+    err?.message,
+    err
+  );
+}
+
+/* -----------------------------
+   MONTHLY STOCK HISTORY
+----------------------------- */
+try {
+  const monthlyRequestId =
+    Math.random().toString(36).substring(2, 12);
+
+  const monthlyUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/teslite-ai/live/tesla-stock-history?timeframe=1M&requestId=${monthlyRequestId}`
+      : `/api/teslite-ai/live/tesla-stock-history?timeframe=1M&requestId=${monthlyRequestId}`;
+
+  console.log(
+    "BEFORE MONTHLY HISTORY FETCH:",
+    monthlyRequestId
+  );
+
+  const monthlyRes = await fetch(monthlyUrl, {
+    cache: "no-store",
+  });
+
+  const monthlyData = await monthlyRes.json();
+
+  console.log(
+    "MONTHLY HISTORY DATA RECEIVED:",
+    monthlyRequestId,
+    monthlyData
+  );
+
+  console.log(
+    "MONTHLY CANDLE COUNT:",
+    monthlyRequestId,
+    monthlyData?.candles?.length
+  );
+
+  if (
+    monthlyRes.status === 429 ||
+    monthlyData?.error
+  ) {
+    console.warn(
+      "Monthly stock history unavailable."
+    );
+  } else if (monthlyData?.candles?.length) {
+    setMonthlyCandles(
+      monthlyData.candles.map((c: any) => ({
+        ...c,
+        time: Math.floor(c.time / 1000),
+      }))
+    );
+  }
+} catch (err: any) {
+  console.error(
+    "MONTHLY STOCK HISTORY FETCH ERROR:",
+    err?.name,
+    err?.message,
+    err
+  );
+}
 
   /* -----------------------------
      EARNINGS
@@ -210,20 +383,44 @@ setLoading(false);
     return slice.reduce((sum, c) => sum + c.close, 0) / slice.length;
   }, [candles]);
 
-  // Determine if there’s a crossover
-  let maCrossoverMessage = "";
-  if (ma20 && ma50) {
-    const prevMa20 = candles.length >= 21 ? candles.slice(-21, -1).reduce((sum, c) => sum + c.close, 0) / 20 : null;
-    if (prevMa20) {
-      if (prevMa20 < ma50 && ma20 > ma50) {
-        maCrossoverMessage = "Bullish crossover forming — potential upside";
-      } else if (prevMa20 > ma50 && ma20 < ma50) {
-        maCrossoverMessage = "Bearish crossover forming — potential weakness";
-      } else {
-        maCrossoverMessage = "No significant crossover";
-      }
-    }
+    const macd = useMemo(() => {
+  const closes = candles.map((candle) => candle.close);
+
+    return calculateMACD(closes);
+}, [candles]);
+
+  const volumeTrend = useMemo(() => {
+  if (candles.length < 10) {
+    return "neutral" as const;
   }
+
+  const recentVolumes = candles
+    .slice(-5)
+    .map((candle) => candle.volume);
+
+  const previousVolumes = candles
+    .slice(-10, -5)
+    .map((candle) => candle.volume);
+
+  const recentAverage =
+    recentVolumes.reduce((sum, volume) => sum + volume, 0) /
+    recentVolumes.length;
+
+  const previousAverage =
+    previousVolumes.reduce((sum, volume) => sum + volume, 0) /
+    previousVolumes.length;
+
+  if (recentAverage > previousAverage * 1.1) {
+    return "rising" as const;
+  }
+
+  if (recentAverage < previousAverage * 0.9) {
+    return "falling" as const;
+  }
+
+  return "neutral" as const;
+}, [candles]);
+
 
   const rsi14 = useMemo(() => {
     if (candles.length < 15) return null;
@@ -242,6 +439,106 @@ setLoading(false);
     const rs = gains / losses;
     return 100 - 100 / (1 + rs);
   }, [candles]);
+
+const marketRegime = useMemo(() => {
+  return marketRegimeEngine({
+    ma20,
+    ma50,
+    rsi: rsi14,
+    percentMove,
+    macdTrend: macd?.trend ?? "neutral",
+    volumeTrend,
+  });
+}, [
+  ma20,
+  ma50,
+  rsi14,
+  percentMove,
+  macd,
+  volumeTrend,
+]);
+
+const weights = useMemo(() => {
+  return weightEngine(marketRegime);
+}, [marketRegime]);
+
+const supportResistance = useMemo(() => {
+  const currentPrice =
+    candles.length > 0
+      ? candles[candles.length - 1].close
+      : 0;
+
+  return supportResistanceEngine({
+    daily: candles,
+    weekly: weeklyCandles,
+    monthly: monthlyCandles,
+    currentPrice,
+  });
+}, [
+  candles,
+  weeklyCandles,
+  monthlyCandles,
+]);
+
+
+/* -----------------------------
+   MULTI-TIMEFRAME ANALYSIS
+----------------------------- */
+const multiTimeframe = useMemo(() => {
+  return multiTimeframeEngine({
+    daily: candles,
+    weekly: weeklyCandles,
+    monthly: monthlyCandles,
+  });
+}, [
+  candles,
+  weeklyCandles,
+  monthlyCandles,
+]);
+
+const supportResistanceAnalysis = useMemo(() => {
+  return supportResistanceEngine({
+    daily: candles,
+    weekly: weeklyCandles,
+    monthly: monthlyCandles,
+    currentPrice: candles[candles.length - 1]?.close ?? 0,
+  });
+}, [
+  candles,
+  weeklyCandles,
+  monthlyCandles,
+]);
+
+// Determine if there’s a crossover
+let maCrossoverMessage = "";
+
+if (ma20 && ma50) {
+  const prevMa20 =
+    candles.length >= 21
+      ? candles
+          .slice(-21, -1)
+          .reduce(
+            (sum, c) => sum + c.close,
+            0
+          ) / 20
+      : null;
+
+  if (prevMa20) {
+    if (prevMa20 < ma50 && ma20 > ma50) {
+      maCrossoverMessage =
+        "Bullish crossover forming — potential upside";
+    } else if (
+      prevMa20 > ma50 &&
+      ma20 < ma50
+    ) {
+      maCrossoverMessage =
+        "Bearish crossover forming — potential weakness";
+    } else {
+      maCrossoverMessage =
+        "No significant crossover";
+    }
+  }
+}  
 
   const maCrossoverSignal = useMemo(() => {
     if (!ma20 || !ma50 || candles.length < 51) return null;
@@ -279,6 +576,219 @@ setLoading(false);
     candles.length > 0
       ? Math.min(...candles.slice(-20).map((c) => c.low))
       : null;
+
+const aiDecision = useMemo(() => {
+  const trend = trendEngine({
+    price: latest?.close ?? 0,
+    ma20,
+    ma50,
+  });
+
+  const momentum = momentumEngine({
+    rsi: rsi14,
+    macdTrend: macd?.trend ?? "neutral",
+  });
+
+  const volume = volumeEngine({
+    volumeTrend,
+    priceChangePercent: percentMove,
+  });
+
+  const priceAction = priceActionEngine({
+    candles,
+    support,
+    resistance,
+  });
+
+  const risk = riskEngine({
+    support,
+    resistance,
+    price: latest?.close ?? 0,
+  });
+
+  const news = newsEngine({
+    headline: headline ?? "",
+  });
+
+  /*
+   * Multi-timeframe signal
+   *
+   * The multi-timeframe engine produces a normalized score
+   * from -100 to +100. Apply the regime-specific weight
+   * from weightEngine().
+   */
+  const multiTimeframeScore = {
+  score: multiTimeframe.overallScore,
+  explanation: multiTimeframe.narrative,
+};
+
+const supportResistanceScore = {
+  score:
+    supportResistanceAnalysis.supportStrength -
+    supportResistanceAnalysis.resistanceStrength,
+
+  explanation:
+    supportResistanceAnalysis.narrative,
+};
+
+  return decisionEngine(
+  [
+    {
+      ...trend,
+      weight: weights.trend,
+    },
+    {
+      ...momentum,
+      weight: weights.momentum,
+    },
+    {
+      ...volume,
+      weight: weights.volume,
+    },
+    {
+      ...priceAction,
+      weight: weights.priceAction,
+    },
+    {
+      ...risk,
+      weight: weights.risk,
+    },
+    {
+      ...news,
+      weight: weights.news,
+    },
+  ],
+  marketRegime,
+  {
+    multiTimeframeScore:
+      multiTimeframeScore.score,
+
+    multiTimeframeWeight:
+      weights.multiTimeframe,
+
+    supportResistanceScore:
+      supportResistanceScore.score,
+
+    supportResistanceWeight:
+      weights.supportResistance,
+
+    currentPrice:
+      latest?.close ?? 0,
+
+      nearestSupport:
+        supportResistanceAnalysis.nearestSupport?.price ??
+        null,
+
+      nearestResistance:
+        supportResistanceAnalysis.nearestResistance?.price ??
+        null,
+
+      supportStrength:
+        supportResistanceAnalysis.supportStrength,
+
+      resistanceStrength:
+        supportResistanceAnalysis.resistanceStrength,
+    }
+  );
+
+}, [
+  latest,
+  ma20,
+  ma50,
+  rsi14,
+  macd,
+  volumeTrend,
+  candles,
+  support,
+  resistance,
+  percentMove,
+  headline,
+  weights,
+  marketRegime,
+  multiTimeframe,
+  supportResistanceAnalysis,
+]);
+
+const aiExplanation = useMemo(() => {
+  return explanationEngine({
+    recommendation: aiDecision.recommendation,
+    confidence: aiDecision.confidence,
+    trend:
+      ma20 !== null &&
+      ma50 !== null &&
+      ma20 > ma50
+        ? "Bullish"
+        : ma20 !== null &&
+          ma50 !== null &&
+          ma20 < ma50
+        ? "Bearish"
+        : "Neutral",
+    regime: marketRegime,
+    rsi: rsi14,
+    macdTrend: macd?.trend ?? "neutral",
+    volumeTrend,
+    newsSummary:
+      headline ??
+      "Current news flow is neutral.",
+  });
+}, [
+  aiDecision,
+  marketRegime,
+  ma20,
+  ma50,
+  rsi14,
+  macd,
+  volumeTrend,
+  headline,
+]);
+
+  const tradingPlan = useMemo(() => {
+    return generateTradingPlan({
+      price: latest?.close ?? 0,
+      trend:
+        ma20 !== null &&
+        ma50 !== null &&
+        ma20 > ma50
+          ? "Bullish"
+          : ma20 !== null &&
+            ma50 !== null &&
+            ma20 < ma50
+          ? "Bearish"
+          : "Neutral",
+      rsi: rsi14,
+      macdTrend: macd?.trend ?? "neutral",
+      volumeTrend,
+      support,
+      resistance,
+    });
+  }, [latest, ma20, ma50, rsi14, macd, volumeTrend, support, resistance]);
+
+    const technicalSignalSummary = useMemo(() => {
+    const rsiState =
+      rsi14 === null
+        ? "neutral"
+        : rsi14 >= 70
+        ? "overbought"
+        : rsi14 <= 30
+        ? "oversold"
+        : "neutral";
+
+    return synthesizeTechnicalSignal({
+      trend:
+        ma20 !== null &&
+        ma50 !== null &&
+        ma20 > ma50
+          ? "Bullish"
+          : ma20 !== null &&
+            ma50 !== null &&
+            ma20 < ma50
+          ? "Bearish"
+          : "Neutral",
+      rsi: rsiState,
+      macd: macd?.trend ?? "neutral",
+      volume: volumeTrend,
+    });
+  }, [rsi14, ma20, ma50, macd, volumeTrend]);
 
   const technicalInsight = useMemo(() => {
     if (!latest) return "Technical data unavailable.";
@@ -455,21 +965,9 @@ setLoading(false);
 
   const priceAboveMA50 = ma50 ? latest.close > ma50 : false;
 
-  const confidenceScore: number | null =
-    rsi !== null
-      ? calculateConfidenceScore({
-          earningsVerdict,
-          technicalBias,
-          rsi,
-          intelligenceConfidence: "Medium",
+    const confidenceScore = aiDecision.confidence;
 
-
-
-        })
-      : null;
-
-  const confidenceLabel =
-    confidenceScore !== null ? getConfidenceLabel(confidenceScore) : "Unavailable";
+const confidenceLabel = getConfidenceLabel(confidenceScore);
 
   useEffect(() => {
     if (confidenceScore === null) return;
@@ -774,6 +1272,9 @@ if (!loading && (!candles.length || !latest)) {
   support={support}
   resistance={resistance}
   confidence={confidenceScore ?? 50}
+  macd={macd}
+  volumeTrend={volumeTrend}
+  technicalSignalSummary={technicalSignalSummary}
 />
 
       {/* -----------------------------
@@ -921,6 +1422,11 @@ if (!loading && (!candles.length || !latest)) {
           <p className="text-gray-400">Earnings data unavailable</p>
         )}
       </div>
+
+      <AIAnalysisPanel
+  decision={aiDecision}
+  explanation={aiExplanation}
+/>
     </div>
   );
 }

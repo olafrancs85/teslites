@@ -8,6 +8,15 @@ interface Props {
   support: number | null;
   resistance: number | null;
   confidence: number;
+  macd: {
+    macd: number;
+    signal: number;
+    histogram: number;
+    trend: "bullish" | "bearish" | "neutral";
+    crossover: "bullish" | "bearish" | "none";
+  } | null;
+  volumeTrend: "rising" | "falling" | "neutral";
+  technicalSignalSummary: string;
 }
 
 export default function AITechnicalBrief({
@@ -18,6 +27,9 @@ export default function AITechnicalBrief({
   support,
   resistance,
   confidence,
+  macd,
+  volumeTrend,
+  technicalSignalSummary,
 }: Props) {
   const rsiMessage =
     rsi === null
@@ -42,6 +54,26 @@ export default function AITechnicalBrief({
         )}. Resistance near $${resistance.toFixed(2)}.`
       : "Support and resistance unavailable.";
 
+  const macdMessage =
+    macd === null
+      ? "MACD data unavailable."
+      : macd.crossover === "bullish"
+      ? "MACD has formed a bullish crossover, suggesting improving momentum."
+      : macd.crossover === "bearish"
+      ? "MACD has formed a bearish crossover, suggesting weakening momentum."
+      : macd.trend === "bullish"
+      ? "MACD remains bullish, supporting positive momentum."
+      : macd.trend === "bearish"
+      ? "MACD remains bearish, indicating negative momentum."
+      : "MACD momentum remains neutral.";
+
+  const volumeMessage =
+    volumeTrend === "rising"
+      ? "Trading volume is rising, confirming stronger market participation."
+      : volumeTrend === "falling"
+      ? "Trading volume is falling, suggesting weaker market participation."
+      : "Trading volume remains relatively neutral.";
+
   return (
     <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-6 mt-8">
       <div className="flex items-center justify-between mb-4">
@@ -55,7 +87,6 @@ export default function AITechnicalBrief({
       </div>
 
       <div className="space-y-3 text-gray-300 leading-relaxed">
-
         <p>
           <strong>Trend:</strong>{" "}
           <span
@@ -75,14 +106,25 @@ export default function AITechnicalBrief({
 
         <p>{rsiMessage}</p>
 
+        <p>{macdMessage}</p>
+
+        <p>{volumeMessage}</p>
+
+        <div className="mt-4 rounded-lg border border-purple-500/20 bg-purple-500/5 p-4">
+          <p className="text-sm font-semibold text-purple-300 mb-1">
+            AI Signal Summary
+          </p>
+
+          <p className="text-gray-200">{technicalSignalSummary}</p>
+        </div>
+
         <p>{supportMessage}</p>
 
         <div className="mt-5 border-t border-gray-700 pt-4 text-sm text-gray-400">
           AI evaluates technical momentum using moving averages, RSI,
-          trend strength and nearby support/resistance zones. This
-          analysis is informational and not financial advice.
+          MACD, volume, trend strength and nearby support/resistance zones.
+          This analysis is informational and not financial advice.
         </div>
-
       </div>
     </div>
   );

@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 
-// Optional: install openai package first: npm i openai
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // required if using OpenAI
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function GET() {
   try {
-    // 1️⃣ Fetch top market-moving Tesla news
+    // 1️⃣ Fetch Tesla news
     const baseUrl =
-  process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
-const res = await fetch(`${baseUrl}/api/teslite-ai/live/tesla-news`, {
-  cache: "no-store",
-});
+    const res = await fetch(
+      `${baseUrl}/api/teslite-ai/live/tesla-news`,
+      {
+        cache: "no-store",
+      }
+    );
 
-const data = await res.json();
-const news = data.news || [];
+    const data = await res.json();
+    const news = data.news || [];
 
     if (!news.length) {
       return NextResponse.json({
@@ -27,18 +29,30 @@ const news = data.news || [];
       });
     }
 
-        // 2️⃣ Take the latest 3 Tesla news articles
+    // 2️⃣ Take latest 3 Tesla news articles
     const latestNews = news.slice(0, 3);
 
     // 3️⃣ Confidence based on number of articles
     let confidence: "Low" | "Medium" | "High" = "Medium";
 
-    if (latestNews.length >= 3) confidence = "High";
-    else if (latestNews.length === 2) confidence = "Medium";
-    else confidence = "Low";
+    if (latestNews.length >= 3) {
+      confidence = "High";
+    } else if (latestNews.length === 2) {
+      confidence = "Medium";
+    } else {
+      confidence = "Low";
+    }
 
-    // 4️⃣ Compose OpenAI prompt
-    const prompt = `
+    // 4️⃣ Fallback summary
+    const fallbackSummary =
+      "Tesla's latest news flow is being monitored for potential market impact.";
+
+    // 5️⃣ Try OpenAI only if an API key exists
+    let summary = "";
+
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const prompt = `
 You are a Tesla financial analyst.
 
 Summarize the following Tesla news in 2–3 sentences.
@@ -54,25 +68,39 @@ Description: ${n.description ?? "No description"}`
 Explain the overall market outlook in plain English.
 `;
 
-    // 5️⃣ Generate AI summary
-    let summary = "";
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          temperature: 0.5,
+        });
 
-    if (process.env.OPENAI_API_KEY) {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.5,
-      });
-
-      summary =
-        completion.choices?.[0]?.message?.content?.trim() ?? "";
+        summary =
+          completion.choices?.[0]?.message?.content?.trim() ?? "";
+      } catch (error: any) {
+        if (
+          error?.code === "insufficient_quota" ||
+          error?.status === 429
+        ) {
+          console.warn(
+            "OpenAI quota unavailable. Using fallback Tesla summary."
+          );
+        } else {
+          console.error(
+            "OpenAI summary generation failed:",
+            error
+          );
+        }
+      }
     }
 
-    // 6️⃣ Fallback summary
+    // 6️⃣ Fallback if OpenAI fails
     if (!summary) {
-      summary = latestNews
-        .map((n: any) => `• ${n.title}`)
-        .join("\n");
+      summary = fallbackSummary;
     }
 
     // 7️⃣ Return
@@ -84,7 +112,8 @@ Explain the overall market outlook in plain English.
     console.error("Tesla AI summary error:", err);
 
     return NextResponse.json({
-      summary: "Unable to fetch Tesla news at the moment.",
+      summary:
+        "Unable to generate Tesla AI summary at the moment.",
       confidence: "Medium",
     });
   }
